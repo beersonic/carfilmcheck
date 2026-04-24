@@ -10,49 +10,111 @@
   <main class="page">
     <section class="hero">
       <div>
-        <p class="eyebrow">Car film spec simulator</p>
-        <h1>Check TSER and VLT faster</h1>
-        <p class="intro">
-          Explore the film data from your Google Sheet, filter by performance, and find the closest matches to your target TSER and VLT.
+        <div class="locale-switch" role="group" aria-label="Language switcher">
+          <button class="locale-button" type="button" data-locale="th">TH</button>
+          <button class="locale-button" type="button" data-locale="en">EN</button>
+        </div>
+        <p class="eyebrow" data-i18n="hero.eyebrow">Car film spec simulator</p>
+        <h1 data-i18n="hero.title">Pick film by driving feel first</h1>
+        <p class="intro" data-i18n="hero.intro">
+          Start with simple groups like night-friendly, balanced, or dark privacy film. Then drill into TSER and VLT only when you need exact specs.
         </p>
         <div class="data-source">
           <div id="dataStatus" class="data-status">Connecting to Google Sheets...</div>
-          <button id="reloadData" class="ghost-button" type="button">Reload sheet</button>
+          <button id="reloadData" class="ghost-button" type="button" data-i18n="actions.reloadSheet">Reload sheet</button>
         </div>
       </div>
       <div class="hero-stats" id="heroStats"></div>
     </section>
 
+    <section class="panel use-cases">
+      <div class="panel-heading">
+        <div>
+          <h2 data-i18n="useCases.heading">Pick by driving use</h2>
+          <p data-i18n="useCases.intro">Use these quick groups if TSER and VLT numbers still feel abstract.</p>
+        </div>
+        <button id="clearUseCase" class="ghost-button" type="button" data-i18n="actions.showAllFilms">Show all films</button>
+      </div>
+      <div id="useCaseGroups" class="use-case-grid"></div>
+    </section>
+
+    <section class="panel preview-panel">
+      <div class="panel-heading">
+        <div>
+          <h2 data-i18n="preview.heading">VLT outside preview</h2>
+          <p data-i18n="preview.intro">Drag the slider to estimate how dark the glass looks from outside before you compare the sheet rows.</p>
+        </div>
+      </div>
+      <div class="preview-layout">
+        <div class="preview-stage">
+          <div class="preview-scene" aria-hidden="true">
+            <div class="preview-sun"></div>
+            <div class="preview-building preview-building-a"></div>
+            <div class="preview-building preview-building-b"></div>
+            <div class="preview-road"></div>
+            <div class="preview-window-frame">
+              <div class="preview-interior" aria-hidden="true">
+                <div class="interior-headliner"></div>
+                <div class="interior-rear-glow"></div>
+                <div class="interior-seat interior-seat-left">
+                  <div class="seat-headrest"></div>
+                </div>
+                <div class="interior-seat interior-seat-right">
+                  <div class="seat-headrest"></div>
+                </div>
+                <div class="interior-console"></div>
+                <div class="interior-wheel"></div>
+                <div class="interior-dash"></div>
+              </div>
+              <div id="previewGlass" class="preview-glass"></div>
+            </div>
+          </div>
+        </div>
+        <div class="preview-controls">
+          <label class="preview-range-label" for="vltPreview">
+            <span data-i18n="preview.label">Preview VLT</span>
+            <strong id="vltPreviewValue">35%</strong>
+          </label>
+          <input id="vltPreview" type="range" min="5" max="70" step="1" value="35">
+          <div class="preview-meter" aria-hidden="true">
+            <div id="previewMeter" class="preview-meter-fill"></div>
+          </div>
+          <p id="vltPreviewLabel" class="preview-label"></p>
+          <p id="vltPreviewHint" class="preview-hint"></p>
+        </div>
+      </div>
+    </section>
+
     <section class="panel controls">
       <div class="panel-heading">
-        <h2>Filters</h2>
-        <button id="resetFilters" class="ghost-button" type="button">Reset</button>
+        <h2 data-i18n="filters.heading">Filters</h2>
+        <button id="resetFilters" class="ghost-button" type="button" data-i18n="actions.reset">Reset</button>
       </div>
       <div class="control-grid">
         <label>
-          <span>Search</span>
-          <input id="searchInput" type="search" placeholder="Brand, series, or code">
+          <span data-i18n="filters.search">Search</span>
+          <input id="searchInput" type="search" placeholder="Brand, series, or code" data-i18n-placeholder="filters.searchPlaceholder">
         </label>
         <label>
-          <span>Brand</span>
+          <span data-i18n="filters.brand">Brand</span>
           <select id="brandFilter">
-            <option value="">All brands</option>
+            <option value="" data-i18n="filters.allBrands">All brands</option>
           </select>
         </label>
         <label>
-          <span>Min VLT</span>
+          <span data-i18n="filters.minVlt">Min VLT</span>
           <input id="minVlt" type="number" min="0" max="100" step="0.1" placeholder="0">
         </label>
         <label>
-          <span>Max VLT</span>
+          <span data-i18n="filters.maxVlt">Max VLT</span>
           <input id="maxVlt" type="number" min="0" max="100" step="0.1" placeholder="100">
         </label>
         <label>
-          <span>Min TSER</span>
+          <span data-i18n="filters.minTser">Min TSER</span>
           <input id="minTser" type="number" min="0" max="100" step="0.1" placeholder="0">
         </label>
         <label>
-          <span>Min IR</span>
+          <span data-i18n="filters.minIr">Min IR</span>
           <input id="minIr" type="number" min="0" max="100" step="0.1" placeholder="0">
         </label>
       </div>
@@ -60,33 +122,33 @@
 
     <section class="panel matcher">
       <div class="panel-heading">
-        <h2>Target match simulator</h2>
-        <p>Set your desired spec and the table will rank the closest matches.</p>
+        <h2 data-i18n="matcher.heading">Target match simulator</h2>
+        <p data-i18n="matcher.intro">Set your desired spec and the table will rank the closest matches.</p>
       </div>
       <div class="control-grid">
         <label>
-          <span>Target VLT</span>
-          <input id="targetVlt" type="number" min="0" max="100" step="0.1" placeholder="e.g. 20">
+          <span data-i18n="matcher.targetVlt">Target VLT</span>
+          <input id="targetVlt" type="number" min="0" max="100" step="0.1" placeholder="e.g. 20" data-i18n-placeholder="matcher.targetVltPlaceholder">
         </label>
         <label>
-          <span>Target TSER</span>
-          <input id="targetTser" type="number" min="0" max="100" step="0.1" placeholder="e.g. 70">
+          <span data-i18n="matcher.targetTser">Target TSER</span>
+          <input id="targetTser" type="number" min="0" max="100" step="0.1" placeholder="e.g. 70" data-i18n-placeholder="matcher.targetTserPlaceholder">
         </label>
         <label>
-          <span>Priority</span>
+          <span data-i18n="matcher.priority">Priority</span>
           <select id="priorityMode">
-            <option value="balanced">Balanced</option>
-            <option value="tser">Prefer TSER</option>
-            <option value="vlt">Prefer VLT</option>
+            <option value="balanced" data-i18n="matcher.priorityBalanced">Balanced</option>
+            <option value="tser" data-i18n="matcher.priorityTser">Prefer TSER</option>
+            <option value="vlt" data-i18n="matcher.priorityVlt">Prefer VLT</option>
           </select>
         </label>
         <label>
-          <span>Show</span>
+          <span data-i18n="matcher.show">Show</span>
           <select id="sortMode">
-            <option value="match">Best match first</option>
-            <option value="tser-desc">Highest TSER first</option>
-            <option value="vlt-asc">Lowest VLT first</option>
-            <option value="vlt-desc">Highest VLT first</option>
+            <option value="match" data-i18n="matcher.sortMatch">Best match first</option>
+            <option value="tser-desc" data-i18n="matcher.sortTserDesc">Highest TSER first</option>
+            <option value="vlt-asc" data-i18n="matcher.sortVltAsc">Lowest VLT first</option>
+            <option value="vlt-desc" data-i18n="matcher.sortVltDesc">Highest VLT first</option>
           </select>
         </label>
       </div>
@@ -96,38 +158,39 @@
     <section class="insights-grid">
       <section class="panel">
         <div class="panel-heading">
-          <h2>TSER vs VLT map</h2>
-          <p>Lower VLT usually means darker film. Higher TSER usually means stronger total heat rejection.</p>
+          <h2 data-i18n="chart.heading">TSER vs VLT map</h2>
+          <p data-i18n="chart.intro">Lower VLT usually means darker film. Higher TSER usually means stronger total heat rejection.</p>
         </div>
         <div id="chart" class="chart"></div>
       </section>
       <section class="panel">
         <div class="panel-heading">
-          <h2>Quick compare</h2>
-          <p>Select up to 3 films from the table.</p>
+          <h2 data-i18n="compare.heading">Quick compare</h2>
+          <p data-i18n="compare.intro">Select up to 3 films from the table.</p>
         </div>
-        <div id="comparePanel" class="compare-panel empty">No films selected yet.</div>
+        <div id="comparePanel" class="compare-panel empty" data-i18n="compare.empty">No films selected yet.</div>
       </section>
     </section>
 
     <section class="panel">
       <div class="panel-heading">
-        <h2>Film specs</h2>
+        <h2 data-i18n="table.heading">Film specs</h2>
         <p id="resultCount"></p>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Compare</th>
-              <th>Brand</th>
-              <th>Series</th>
-              <th>Code</th>
+              <th data-i18n="table.compare">Compare</th>
+              <th data-i18n="table.use">Use</th>
+              <th data-i18n="table.brand">Brand</th>
+              <th data-i18n="table.series">Series</th>
+              <th data-i18n="table.code">Code</th>
               <th>IR</th>
               <th>UV</th>
               <th>VLT</th>
               <th>TSER</th>
-              <th>Match</th>
+              <th data-i18n="table.match">Match</th>
             </tr>
           </thead>
           <tbody id="specTable"></tbody>

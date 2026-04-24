@@ -1,10 +1,326 @@
 const GOOGLE_SHEET_ID = "1a0dw7qvvD_zHblQsJPyMwYfTY-Oc5mVYIoUw5MPB_jI";
 const SHEET_QUERY_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:__FILM_SHEET_CALLBACK__`;
+const LOCALE_STORAGE_KEY = "carfilmcheck-locale";
+
+const USE_CASES = [
+  { key: "night", minVlt: 35 },
+  { key: "balanced", minVlt: 20 },
+  { key: "dark", minVlt: 10 },
+  { key: "privacy", minVlt: 0 }
+];
+
+const MESSAGES = {
+  th: {
+    pageTitle: "เช็กสเปกฟิล์มรถยนต์",
+    hero: {
+      eyebrow: "ตัวช่วยเลือกฟิล์มรถยนต์",
+      title: "เริ่มเลือกจากความรู้สึกตอนใช้งานจริงก่อน",
+      intro: "เริ่มจากกลุ่มที่เข้าใจง่าย เช่น ขับกลางคืนสบาย สมดุลใช้งานทุกวัน หรือฟิล์มลุคเข้ม แล้วค่อยลงไปดู TSER และ VLT เมื่ออยากเทียบสเปกละเอียด"
+    },
+    actions: {
+      reloadSheet: "โหลดชีตใหม่",
+      showAllFilms: "แสดงทุกฟิล์ม",
+      reset: "ล้างค่า"
+    },
+    useCases: {
+      heading: "เลือกตามลักษณะการขับ",
+      intro: "ถ้ายังงงกับ TSER และ VLT ให้เริ่มจากกลุ่มใช้งานเหล่านี้ก่อน",
+      empty: "กลุ่มการใช้งานจะแสดงหลังจากโหลดชีตสำเร็จ",
+      noMatches: "ไม่มีฟิล์มในเงื่อนไขที่เลือก",
+      count: "{count} รายการ",
+      night: {
+        label: "เหมาะขับกลางคืน",
+        range: "VLT 35% ขึ้นไป",
+        summary: "ห้องโดยสารดูโปร่งกว่า มองออกง่ายกว่าเมื่อขับตอนกลางคืน",
+        hint: "เหมาะกับคนที่อยากได้มุมมองสว่างและสบายตาในตอนกลางคืน"
+      },
+      balanced: {
+        label: "สมดุลใช้งานทุกวัน",
+        range: "VLT 20-34%",
+        summary: "สมดุลระหว่างความสบาย ความเข้ม และการมองเห็น",
+        hint: "เป็นช่วงที่ใช้งานได้รอบด้านที่สุดสำหรับรถใช้งานประจำวัน"
+      },
+      dark: {
+        label: "ลุคเข้ม",
+        range: "VLT 10-19%",
+        summary: "มองจากด้านนอกจะเข้มชัดขึ้นและให้ความเป็นส่วนตัวมากขึ้น",
+        hint: "เริ่มให้ภาพลักษณ์เข้มจากด้านนอกชัดเจน และตอนกลางคืนอาจรู้สึกทึบขึ้น"
+      },
+      privacy: {
+        label: "เน้นความเป็นส่วนตัว",
+        range: "VLT ต่ำกว่า 10%",
+        summary: "ลุคเข้มมาก เน้นความเป็นส่วนตัวเป็นหลัก",
+        hint: "ดูเข้มมากจากด้านนอก ควรเช็กให้ตรงกับการใช้งานจริงก่อนตัดสินใจ"
+      }
+    },
+    preview: {
+      heading: "ตัวอย่างความเข้มจากด้านนอก",
+      intro: "ลากแถบเพื่อดูคร่าวๆ ว่ากระจกจะดูเข้มจากด้านนอกประมาณไหน ก่อนจะไปดูรายการฟิล์มจริงในตาราง",
+      label: "ดูตัวอย่าง VLT",
+      current: "{label} ที่ VLT {vlt}%"
+    },
+    filters: {
+      heading: "ตัวกรอง",
+      search: "ค้นหา",
+      searchPlaceholder: "ยี่ห้อ ซีรีส์ หรือรหัส",
+      brand: "ยี่ห้อ",
+      allBrands: "ทุกยี่ห้อ",
+      minVlt: "VLT ต่ำสุด",
+      maxVlt: "VLT สูงสุด",
+      minTser: "TSER ต่ำสุด",
+      minIr: "IR ต่ำสุด"
+    },
+    matcher: {
+      heading: "จำลองการหาใกล้เคียงเป้าหมาย",
+      intro: "ตั้งสเปกที่ต้องการ แล้วตารางจะเรียงรุ่นที่ใกล้เคียงที่สุดให้",
+      targetVlt: "VLT เป้าหมาย",
+      targetVltPlaceholder: "เช่น 20",
+      targetTser: "TSER เป้าหมาย",
+      targetTserPlaceholder: "เช่น 70",
+      priority: "ให้น้ำหนัก",
+      priorityBalanced: "สมดุล",
+      priorityTser: "เน้น TSER",
+      priorityVlt: "เน้น VLT",
+      show: "การเรียง",
+      sortMatch: "ใกล้เคียงที่สุดก่อน",
+      sortTserDesc: "TSER สูงสุดก่อน",
+      sortVltAsc: "VLT ต่ำสุดก่อน",
+      sortVltDesc: "VLT สูงสุดก่อน"
+    },
+    chart: {
+      heading: "แผนที่ TSER vs VLT",
+      intro: "VLT ต่ำมักหมายถึงฟิล์มเข้มกว่า ส่วน TSER สูงมักหมายถึงกันความร้อนได้รวมมากกว่า",
+      empty: "ยังไม่มีข้อมูลให้พล็อต",
+      ariaLabel: "กราฟกระจายแสดงค่า VLT บนแกนนอนและ TSER บนแกนตั้ง",
+      xAxis: "VLT (%)",
+      yAxis: "TSER (%)",
+      unavailable: "กราฟจะใช้งานได้หลังจากโหลดชีตสำเร็จ",
+      loading: "กำลังโหลดกราฟ..."
+    },
+    compare: {
+      heading: "เทียบเร็ว",
+      intro: "เลือกได้สูงสุด 3 ฟิล์มจากตาราง",
+      empty: "ยังไม่ได้เลือกฟิล์ม",
+      emptyAfterLoad: "เลือกฟิล์มหลังจากโหลดชีตเสร็จ",
+      noSeriesLabel: "ไม่มีชื่อซีรีส์"
+    },
+    table: {
+      heading: "สเปกฟิล์ม",
+      compare: "เทียบ",
+      use: "การใช้งาน",
+      brand: "ยี่ห้อ",
+      series: "ซีรีส์",
+      code: "รหัส",
+      match: "ความใกล้เคียง",
+      noResults: "ไม่พบผลลัพธ์",
+      loading: "กำลังโหลดสเปกฟิล์มจาก Google Sheets...",
+      loadFailed: "ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้"
+    },
+    heroStats: {
+      filmsLoaded: "จำนวนฟิล์ม",
+      averageSpec: "ค่าเฉลี่ยสเปก",
+      topTser: "TSER สูงสุด",
+      brightestFilm: "ฟิล์มสว่างสุด",
+      waiting: "กำลังรอข้อมูลสดจากชีต",
+      summaryAfterLoad: "สรุป TSER และ VLT จะแสดงหลังโหลดเสร็จ",
+      noRows: "ยังไม่มีข้อมูลจากชีตในตอนนี้",
+      availableAfterLoad: "จะแสดงหลังโหลดชีตสำเร็จ",
+      fromLiveSheet: "จากข้อมูลสดใน Google Sheet",
+      quickBaseline: "ภาพรวมค่าเฉลี่ยของสินค้าทั้งหมด"
+    },
+    status: {
+      connecting: "กำลังเชื่อมต่อ Google Sheets...",
+      refreshing: "กำลังรีเฟรชข้อมูลจาก Google Sheets...",
+      ready: "เชื่อมต่อ Google Sheet สำเร็จ อัปเดตล่าสุด {timestamp}",
+      loadFailed: "โหลด Google Sheet ไม่สำเร็จ {reason}"
+    },
+    summary: {
+      loadingResults: "กำลังโหลดสเปกฟิล์ม...",
+      loadingMatch: "กำลังดึงข้อมูลสดจาก Google Sheet ที่เชื่อมไว้",
+      sheetLoadFailed: "โหลดชีตไม่สำเร็จ",
+      checkSheet: "ตรวจสอบว่าเปิดแชร์ชีตสาธารณะแล้ว จากนั้นกดโหลดชีตใหม่",
+      resultsCount: "พบ {count} รายการ",
+      noFilterMatch: "ไม่มีฟิล์มที่ตรงกับเงื่อนไขปัจจุบัน",
+      noFilmData: "ยังไม่มีข้อมูลฟิล์ม",
+      currentLeader: "ตัวเด่นตอนนี้: {brand} {code} อยู่ในกลุ่ม {useCase} มี TSER {tser}% และ VLT {vlt}%",
+      bestMatch: "ใกล้เคียงที่สุด: {brand} {code} อยู่ในกลุ่ม {useCase} มี TSER {tser}% และ VLT {vlt}% ({tserDelta}, {vltDelta})",
+      tserDelta: "ห่างจาก TSER เป้าหมาย {delta}",
+      vltDelta: "ห่างจาก VLT เป้าหมาย {delta}",
+      notAvailable: "ไม่มีข้อมูล"
+    },
+    match: {
+      excellent: "ดีมาก",
+      good: "ดี",
+      fair: "พอใช้"
+    },
+    errors: {
+      invalidSheetResponse: "ข้อมูลตอบกลับจาก Google Sheets ไม่ถูกต้อง",
+      requestTimedOut: "การขอข้อมูลหมดเวลา",
+      scriptLoadFailed: "โหลดสคริปต์ของชีตไม่สำเร็จ"
+    }
+  },
+  en: {
+    pageTitle: "Car Film Spec Checker",
+    hero: {
+      eyebrow: "Car film spec simulator",
+      title: "Pick film by driving feel first",
+      intro: "Start with simple groups like night-friendly, balanced, or dark privacy film. Then drill into TSER and VLT only when you need exact specs."
+    },
+    actions: {
+      reloadSheet: "Reload sheet",
+      showAllFilms: "Show all films",
+      reset: "Reset"
+    },
+    useCases: {
+      heading: "Pick by driving use",
+      intro: "Use these quick groups if TSER and VLT numbers still feel abstract.",
+      empty: "Use-case groups will appear after the sheet loads.",
+      noMatches: "No films in the current filters",
+      count: "{count} films",
+      night: {
+        label: "Night driving friendly",
+        range: "35%+ VLT",
+        summary: "Lighter cabin feel with better outward visibility after dark.",
+        hint: "This range usually feels safest for drivers who want a brighter view at night."
+      },
+      balanced: {
+        label: "Balanced everyday",
+        range: "20-34% VLT",
+        summary: "A middle ground between comfort, shade, and visibility.",
+        hint: "This is the most all-around range for daily driving and a cleaner exterior look."
+      },
+      dark: {
+        label: "Dark look",
+        range: "10-19% VLT",
+        summary: "Noticeably darker from outside with a stronger privacy feel.",
+        hint: "This range starts to look dark from outside and can feel more closed in at night."
+      },
+      privacy: {
+        label: "Privacy look",
+        range: "Below 10% VLT",
+        summary: "Very dark appearance aimed at privacy-first builds.",
+        hint: "This range looks very dark from outside and should be checked carefully against real driving needs."
+      }
+    },
+    preview: {
+      heading: "VLT outside preview",
+      intro: "Drag the slider to estimate how dark the glass looks from outside before you compare the sheet rows.",
+      label: "Preview VLT",
+      current: "{label} at {vlt}% VLT"
+    },
+    filters: {
+      heading: "Filters",
+      search: "Search",
+      searchPlaceholder: "Brand, series, or code",
+      brand: "Brand",
+      allBrands: "All brands",
+      minVlt: "Min VLT",
+      maxVlt: "Max VLT",
+      minTser: "Min TSER",
+      minIr: "Min IR"
+    },
+    matcher: {
+      heading: "Target match simulator",
+      intro: "Set your desired spec and the table will rank the closest matches.",
+      targetVlt: "Target VLT",
+      targetVltPlaceholder: "e.g. 20",
+      targetTser: "Target TSER",
+      targetTserPlaceholder: "e.g. 70",
+      priority: "Priority",
+      priorityBalanced: "Balanced",
+      priorityTser: "Prefer TSER",
+      priorityVlt: "Prefer VLT",
+      show: "Show",
+      sortMatch: "Best match first",
+      sortTserDesc: "Highest TSER first",
+      sortVltAsc: "Lowest VLT first",
+      sortVltDesc: "Highest VLT first"
+    },
+    chart: {
+      heading: "TSER vs VLT map",
+      intro: "Lower VLT usually means darker film. Higher TSER usually means stronger total heat rejection.",
+      empty: "No data to plot.",
+      ariaLabel: "Scatter chart showing VLT on the horizontal axis and TSER on the vertical axis",
+      xAxis: "VLT (%)",
+      yAxis: "TSER (%)",
+      unavailable: "Chart unavailable until the sheet loads.",
+      loading: "Loading chart..."
+    },
+    compare: {
+      heading: "Quick compare",
+      intro: "Select up to 3 films from the table.",
+      empty: "No films selected yet.",
+      emptyAfterLoad: "Select films after the sheet finishes loading.",
+      noSeriesLabel: "No series label"
+    },
+    table: {
+      heading: "Film specs",
+      compare: "Compare",
+      use: "Use",
+      brand: "Brand",
+      series: "Series",
+      code: "Code",
+      match: "Match",
+      noResults: "No results.",
+      loading: "Loading film specs from Google Sheets...",
+      loadFailed: "Unable to load live data from Google Sheets."
+    },
+    heroStats: {
+      filmsLoaded: "Films loaded",
+      averageSpec: "Average spec",
+      topTser: "Top TSER",
+      brightestFilm: "Brightest film",
+      waiting: "Waiting for live sheet data",
+      summaryAfterLoad: "TSER and VLT summary will appear after load",
+      noRows: "No live rows are available right now",
+      availableAfterLoad: "Available after a successful sheet load",
+      fromLiveSheet: "From the live Google Sheet",
+      quickBaseline: "Quick baseline across all products"
+    },
+    status: {
+      connecting: "Connecting to Google Sheets...",
+      refreshing: "Refreshing from Google Sheets...",
+      ready: "Live Google Sheet connected. Last refresh {timestamp}.",
+      loadFailed: "Could not load the Google Sheet. {reason}"
+    },
+    summary: {
+      loadingResults: "Loading film specs...",
+      loadingMatch: "Fetching live data from the linked Google Sheet.",
+      sheetLoadFailed: "Sheet load failed.",
+      checkSheet: "Check that the sheet is public, then click Reload sheet.",
+      resultsCount: "{count} matching films",
+      noFilterMatch: "No films match the current filters.",
+      noFilmData: "No film data is loaded yet.",
+      currentLeader: "Current leader: {brand} {code} in {useCase} with {tser}% TSER and {vlt}% VLT.",
+      bestMatch: "Best match: {brand} {code} in {useCase} - {tser}% TSER, {vlt}% VLT ({tserDelta}, {vltDelta}).",
+      tserDelta: "{delta} away from TSER target",
+      vltDelta: "{delta} away from VLT target",
+      notAvailable: "n/a"
+    },
+    match: {
+      excellent: "Excellent",
+      good: "Good",
+      fair: "Fair"
+    },
+    errors: {
+      invalidSheetResponse: "The Google Sheets response was not valid.",
+      requestTimedOut: "The request timed out.",
+      scriptLoadFailed: "The sheet script could not be loaded."
+    }
+  }
+};
 
 const state = {
   films: [],
   brandColors: {},
   lastLoadedAt: null,
+  previewVlt: 35,
+  locale: getInitialLocale(),
+  sheetStatus: {
+    mode: "loading",
+    key: "status.connecting",
+    params: {}
+  },
   filters: {
     search: "",
     brand: "",
@@ -14,6 +330,7 @@ const state = {
     minIr: null,
     targetVlt: null,
     targetTser: null,
+    useCase: "",
     priority: "balanced",
     sort: "match"
   },
@@ -24,6 +341,8 @@ const elements = {
   heroStats: document.getElementById("heroStats"),
   dataStatus: document.getElementById("dataStatus"),
   reloadData: document.getElementById("reloadData"),
+  clearUseCase: document.getElementById("clearUseCase"),
+  useCaseGroups: document.getElementById("useCaseGroups"),
   brandFilter: document.getElementById("brandFilter"),
   searchInput: document.getElementById("searchInput"),
   minVlt: document.getElementById("minVlt"),
@@ -39,14 +358,25 @@ const elements = {
   chart: document.getElementById("chart"),
   comparePanel: document.getElementById("comparePanel"),
   matchSummary: document.getElementById("matchSummary"),
-  resetFilters: document.getElementById("resetFilters")
+  resetFilters: document.getElementById("resetFilters"),
+  vltPreview: document.getElementById("vltPreview"),
+  vltPreviewValue: document.getElementById("vltPreviewValue"),
+  vltPreviewLabel: document.getElementById("vltPreviewLabel"),
+  vltPreviewHint: document.getElementById("vltPreviewHint"),
+  previewGlass: document.getElementById("previewGlass"),
+  previewMeter: document.getElementById("previewMeter"),
+  localeButtons: [...document.querySelectorAll("[data-locale]")],
+  translatable: [...document.querySelectorAll("[data-i18n]")],
+  translatablePlaceholders: [...document.querySelectorAll("[data-i18n-placeholder]")]
 };
 
 initialize();
 
 function initialize() {
   bindEvents();
+  renderStaticText();
   renderLoadingShell();
+  renderVltPreview();
   loadSheetData();
 }
 
@@ -59,6 +389,10 @@ function bindEvents() {
     elements.targetVlt,
     elements.targetTser
   ];
+
+  elements.localeButtons.forEach((button) => {
+    button.addEventListener("click", () => setLocale(button.dataset.locale));
+  });
 
   elements.searchInput.addEventListener("input", (event) => {
     state.filters.search = event.target.value.trim().toLowerCase();
@@ -97,6 +431,7 @@ function bindEvents() {
       minIr: null,
       targetVlt: null,
       targetTser: null,
+      useCase: "",
       priority: "balanced",
       sort: "match"
     };
@@ -108,45 +443,107 @@ function bindEvents() {
   elements.reloadData.addEventListener("click", () => {
     loadSheetData();
   });
+
+  elements.clearUseCase.addEventListener("click", () => {
+    state.filters.useCase = "";
+    render();
+  });
+
+  elements.useCaseGroups.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-use-case]");
+    if (!trigger) {
+      return;
+    }
+
+    state.filters.useCase = state.filters.useCase === trigger.dataset.useCase ? "" : trigger.dataset.useCase;
+    render();
+  });
+
+  elements.vltPreview.addEventListener("input", (event) => {
+    state.previewVlt = parseOptionalNumber(event.target.value) ?? 35;
+    renderVltPreview();
+  });
+}
+
+function setLocale(locale) {
+  if (!MESSAGES[locale] || locale === state.locale) {
+    return;
+  }
+
+  state.locale = locale;
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  renderStaticText();
+  syncInputs();
+  renderVltPreview();
+  renderBrandOptions();
+  renderHeroStats(state.films);
+  applyDataStatus();
+  render();
+}
+
+function renderStaticText() {
+  document.documentElement.lang = state.locale;
+  document.title = t("pageTitle");
+
+  elements.localeButtons.forEach((button) => {
+    const isActive = button.dataset.locale === state.locale;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+
+  elements.translatable.forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+
+  elements.translatablePlaceholders.forEach((node) => {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  });
 }
 
 function syncInputs() {
-  elements.searchInput.value = "";
-  elements.brandFilter.value = "";
-  elements.minVlt.value = "";
-  elements.maxVlt.value = "";
-  elements.minTser.value = "";
-  elements.minIr.value = "";
-  elements.targetVlt.value = "";
-  elements.targetTser.value = "";
-  elements.priorityMode.value = "balanced";
-  elements.sortMode.value = "match";
+  elements.searchInput.value = state.filters.search ? state.filters.search : "";
+  elements.brandFilter.value = state.filters.brand;
+  elements.minVlt.value = stringifyInputValue(state.filters.minVlt);
+  elements.maxVlt.value = stringifyInputValue(state.filters.maxVlt);
+  elements.minTser.value = stringifyInputValue(state.filters.minTser);
+  elements.minIr.value = stringifyInputValue(state.filters.minIr);
+  elements.targetVlt.value = stringifyInputValue(state.filters.targetVlt);
+  elements.targetTser.value = stringifyInputValue(state.filters.targetTser);
+  elements.vltPreview.value = String(state.previewVlt);
+  elements.priorityMode.value = state.filters.priority;
+  elements.sortMode.value = state.filters.sort;
 }
 
 function renderLoadingShell() {
-  updateDataStatus("loading", "Connecting to Google Sheets...");
+  setDataStatus("loading", "status.connecting");
+  elements.useCaseGroups.innerHTML = `
+    <article class="use-case-card skeleton-card"></article>
+    <article class="use-case-card skeleton-card"></article>
+    <article class="use-case-card skeleton-card"></article>
+    <article class="use-case-card skeleton-card"></article>
+  `;
   elements.heroStats.innerHTML = `
     <article class="stat-card">
-      <span class="stat-label">Films loaded</span>
+      <span class="stat-label">${t("heroStats.filmsLoaded")}</span>
       <span class="stat-value">--</span>
-      <span class="stat-caption">Waiting for live sheet data</span>
+      <span class="stat-caption">${t("heroStats.waiting")}</span>
     </article>
     <article class="stat-card">
-      <span class="stat-label">Average spec</span>
+      <span class="stat-label">${t("heroStats.averageSpec")}</span>
       <span class="stat-value">--</span>
-      <span class="stat-caption">TSER and VLT summary will appear after load</span>
+      <span class="stat-caption">${t("heroStats.summaryAfterLoad")}</span>
     </article>
   `;
-  elements.resultCount.textContent = "Loading film specs...";
-  elements.matchSummary.textContent = "Fetching live data from the linked Google Sheet.";
-  elements.table.innerHTML = `<tr><td colspan="9">Loading film specs from Google Sheets...</td></tr>`;
-  elements.chart.innerHTML = "<p>Loading chart...</p>";
+  elements.resultCount.textContent = t("summary.loadingResults");
+  elements.matchSummary.textContent = t("summary.loadingMatch");
+  elements.table.innerHTML = `<tr><td colspan="10">${t("table.loading")}</td></tr>`;
+  elements.chart.innerHTML = `<p>${t("chart.loading")}</p>`;
   elements.comparePanel.className = "compare-panel empty";
-  elements.comparePanel.textContent = "Select films after the sheet finishes loading.";
+  elements.comparePanel.textContent = t("compare.emptyAfterLoad");
 }
 
 async function loadSheetData() {
-  updateDataStatus("loading", "Refreshing from Google Sheets...");
+  setDataStatus("loading", "status.refreshing");
   elements.reloadData.disabled = true;
 
   try {
@@ -164,36 +561,68 @@ async function loadSheetData() {
 
     renderBrandOptions();
     renderHeroStats(films);
-    updateDataStatus("ready", `Live Google Sheet connected. Last refresh ${formatTimestamp(state.lastLoadedAt)}.`);
+    setDataStatus("ready", "status.ready", { timestamp: formatTimestamp(state.lastLoadedAt) });
     render();
   } catch (error) {
     state.films = [];
     state.brandColors = {};
     renderBrandOptions();
     renderHeroStats([]);
-    updateDataStatus("error", `Could not load the Google Sheet. ${error.message}`);
-    elements.resultCount.textContent = "Sheet load failed.";
-    elements.matchSummary.textContent = "Check that the sheet is public, then click Reload sheet.";
-    elements.table.innerHTML = `<tr><td colspan="9">Unable to load live data from Google Sheets.</td></tr>`;
-    elements.chart.innerHTML = "<p>Chart unavailable until the sheet loads.</p>";
+    setDataStatus("error", "status.loadFailed", { reason: error.message });
+    elements.resultCount.textContent = t("summary.sheetLoadFailed");
+    elements.matchSummary.textContent = t("summary.checkSheet");
+    elements.table.innerHTML = `<tr><td colspan="10">${t("table.loadFailed")}</td></tr>`;
+    elements.chart.innerHTML = `<p>${t("chart.unavailable")}</p>`;
     elements.comparePanel.className = "compare-panel empty";
-    elements.comparePanel.textContent = "Compare data will appear after the sheet loads.";
+    elements.comparePanel.textContent = t("compare.emptyAfterLoad");
   } finally {
     elements.reloadData.disabled = false;
   }
 }
 
 function render() {
+  const groupedRows = applyFiltersAndScores(state.films, { ...state.filters, useCase: "" });
   const prepared = applyFiltersAndScores(state.films, state.filters);
+  renderUseCaseGroups(groupedRows);
   renderSummary(prepared);
   renderTable(prepared);
   renderChart(prepared);
   renderComparePanel();
 }
 
+function renderUseCaseGroups(rows) {
+  if (!state.films.length) {
+    elements.useCaseGroups.innerHTML = `<p class="empty-copy">${t("useCases.empty")}</p>`;
+    elements.clearUseCase.disabled = true;
+    return;
+  }
+
+  const cards = USE_CASES.map((useCase) => {
+    const localized = getUseCaseCopy(useCase.key);
+    const matches = rows.filter((row) => row.useCase.key === useCase.key);
+    const sampleText = matches.length
+      ? matches.slice(0, 3).map((row) => `${row.brand} ${row.code}`).join(" • ")
+      : t("useCases.noMatches");
+    const isActive = state.filters.useCase === useCase.key ? " active" : "";
+
+    return `
+      <button class="use-case-card${isActive}" type="button" data-use-case="${useCase.key}">
+        <span class="use-case-range">${localized.range}</span>
+        <strong>${localized.label}</strong>
+        <span class="use-case-summary">${localized.summary}</span>
+        <span class="use-case-count">${t("useCases.count", { count: matches.length })}</span>
+        <span class="use-case-samples">${sampleText}</span>
+      </button>
+    `;
+  }).join("");
+
+  elements.useCaseGroups.innerHTML = cards;
+  elements.clearUseCase.disabled = !state.filters.useCase;
+}
+
 function renderBrandOptions() {
   const brands = [...new Set(state.films.map((film) => film.brand))].sort((a, b) => a.localeCompare(b));
-  elements.brandFilter.innerHTML = '<option value="">All brands</option>';
+  elements.brandFilter.innerHTML = `<option value="">${t("filters.allBrands")}</option>`;
 
   brands.forEach((brand) => {
     const option = document.createElement("option");
@@ -209,14 +638,14 @@ function renderHeroStats(rows) {
   if (!rows.length) {
     elements.heroStats.innerHTML = `
       <article class="stat-card">
-        <span class="stat-label">Films loaded</span>
+        <span class="stat-label">${t("heroStats.filmsLoaded")}</span>
         <span class="stat-value">0</span>
-        <span class="stat-caption">No live rows are available right now</span>
+        <span class="stat-caption">${t("heroStats.noRows")}</span>
       </article>
       <article class="stat-card">
-        <span class="stat-label">Average spec</span>
+        <span class="stat-label">${t("heroStats.averageSpec")}</span>
         <span class="stat-value">--</span>
-        <span class="stat-caption">Available after a successful sheet load</span>
+        <span class="stat-caption">${t("heroStats.availableAfterLoad")}</span>
       </article>
     `;
     return;
@@ -229,22 +658,22 @@ function renderHeroStats(rows) {
 
   elements.heroStats.innerHTML = `
     <article class="stat-card">
-      <span class="stat-label">Films loaded</span>
+      <span class="stat-label">${t("heroStats.filmsLoaded")}</span>
       <span class="stat-value">${rows.length}</span>
-      <span class="stat-caption">From the live Google Sheet</span>
+      <span class="stat-caption">${t("heroStats.fromLiveSheet")}</span>
     </article>
     <article class="stat-card">
-      <span class="stat-label">Average spec</span>
+      <span class="stat-label">${t("heroStats.averageSpec")}</span>
       <span class="stat-value">${avgTser.toFixed(1)} TSER / ${avgVlt.toFixed(1)} VLT</span>
-      <span class="stat-caption">Quick baseline across all products</span>
+      <span class="stat-caption">${t("heroStats.quickBaseline")}</span>
     </article>
     <article class="stat-card">
-      <span class="stat-label">Top TSER</span>
+      <span class="stat-label">${t("heroStats.topTser")}</span>
       <span class="stat-value">${highestTser.tser}%</span>
       <span class="stat-caption">${highestTser.brand} ${highestTser.code}</span>
     </article>
     <article class="stat-card">
-      <span class="stat-label">Brightest film</span>
+      <span class="stat-label">${t("heroStats.brightestFilm")}</span>
       <span class="stat-value">${highestVlt.vlt}% VLT</span>
       <span class="stat-caption">${highestVlt.brand} ${highestVlt.code}</span>
     </article>
@@ -253,31 +682,51 @@ function renderHeroStats(rows) {
 
 function renderSummary(rows) {
   const bestMatch = rows[0];
-  elements.resultCount.textContent = `${rows.length} matching films`;
+  elements.resultCount.textContent = t("summary.resultsCount", { count: rows.length });
 
   if (!bestMatch) {
     elements.matchSummary.textContent = state.films.length
-      ? "No films match the current filters."
-      : "No film data is loaded yet.";
+      ? t("summary.noFilterMatch")
+      : t("summary.noFilmData");
     return;
   }
 
   const hasTargets = state.filters.targetVlt !== null || state.filters.targetTser !== null;
+  const useCaseLabel = getUseCaseCopy(bestMatch.useCase.key).label;
   if (!hasTargets) {
-    elements.matchSummary.textContent = `Current leader: ${bestMatch.brand} ${bestMatch.code} with ${bestMatch.tser}% TSER and ${bestMatch.vlt}% VLT.`;
+    elements.matchSummary.textContent = t("summary.currentLeader", {
+      brand: bestMatch.brand,
+      code: bestMatch.code,
+      useCase: useCaseLabel,
+      tser: bestMatch.tser,
+      vlt: bestMatch.vlt
+    });
     return;
   }
 
-  const tserDelta = bestMatch.deltaTser === null ? "n/a" : `${bestMatch.deltaTser.toFixed(1)} away from TSER target`;
-  const vltDelta = bestMatch.deltaVlt === null ? "n/a" : `${bestMatch.deltaVlt.toFixed(1)} away from VLT target`;
-  elements.matchSummary.textContent = `Best match: ${bestMatch.brand} ${bestMatch.code} - ${bestMatch.tser}% TSER, ${bestMatch.vlt}% VLT (${tserDelta}, ${vltDelta}).`;
+  const tserDelta = bestMatch.deltaTser === null
+    ? t("summary.notAvailable")
+    : t("summary.tserDelta", { delta: bestMatch.deltaTser.toFixed(1) });
+  const vltDelta = bestMatch.deltaVlt === null
+    ? t("summary.notAvailable")
+    : t("summary.vltDelta", { delta: bestMatch.deltaVlt.toFixed(1) });
+
+  elements.matchSummary.textContent = t("summary.bestMatch", {
+    brand: bestMatch.brand,
+    code: bestMatch.code,
+    useCase: useCaseLabel,
+    tser: bestMatch.tser,
+    vlt: bestMatch.vlt,
+    tserDelta,
+    vltDelta
+  });
 }
 
 function renderTable(rows) {
   elements.table.innerHTML = "";
 
   if (!rows.length) {
-    elements.table.innerHTML = `<tr><td colspan="9">No results.</td></tr>`;
+    elements.table.innerHTML = `<tr><td colspan="10">${t("table.noResults")}</td></tr>`;
     return;
   }
 
@@ -287,6 +736,7 @@ function renderTable(rows) {
 
     tr.innerHTML = `
       <td><input type="checkbox" data-code="${row.code}" ${checked}></td>
+      <td>${renderUseCaseBadge(row.useCase)}</td>
       <td>${row.brand}</td>
       <td>${row.series || "-"}</td>
       <td>${row.code}</td>
@@ -304,7 +754,7 @@ function renderTable(rows) {
 
 function renderChart(rows) {
   if (!rows.length) {
-    elements.chart.innerHTML = "<p>No data to plot.</p>";
+    elements.chart.innerHTML = `<p>${t("chart.empty")}</p>`;
     return;
   }
 
@@ -339,12 +789,12 @@ function renderChart(rows) {
   }).join("");
 
   elements.chart.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Scatter chart showing VLT on the horizontal axis and TSER on the vertical axis">
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${t("chart.ariaLabel")}">
       ${gridLines}
       <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="rgba(255,255,255,0.3)"></line>
       <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="rgba(255,255,255,0.3)"></line>
-      <text class="axis-label" x="${width / 2}" y="${height - 2}" text-anchor="middle">VLT (%)</text>
-      <text class="axis-label" x="18" y="${height / 2}" text-anchor="middle" transform="rotate(-90 18 ${height / 2})">TSER (%)</text>
+      <text class="axis-label" x="${width / 2}" y="${height - 2}" text-anchor="middle">${t("chart.xAxis")}</text>
+      <text class="axis-label" x="18" y="${height / 2}" text-anchor="middle" transform="rotate(-90 18 ${height / 2})">${t("chart.yAxis")}</text>
       ${dots}
     </svg>
   `;
@@ -355,7 +805,7 @@ function renderComparePanel() {
 
   if (!selected.length) {
     elements.comparePanel.className = "compare-panel empty";
-    elements.comparePanel.textContent = "No films selected yet.";
+    elements.comparePanel.textContent = t("compare.empty");
     return;
   }
 
@@ -363,7 +813,8 @@ function renderComparePanel() {
   elements.comparePanel.innerHTML = selected.map((film) => `
     <article class="compare-card">
       <h3>${film.brand} ${film.code}</h3>
-      <div class="compare-meta">${film.series || "No series label"}</div>
+      <div class="compare-meta">${film.series || t("compare.noSeriesLabel")}</div>
+      <div class="compare-tag-row">${renderUseCaseBadge(getUseCaseForVlt(film.vlt))}</div>
       <div class="spec-grid">
         <div class="spec-pill">IR: ${formatNumber(film.ir)}%</div>
         <div class="spec-pill">UV: ${formatNumber(film.uv)}%</div>
@@ -398,17 +849,39 @@ function trimCompareSelection() {
 }
 
 function applyFiltersAndScores(rows, filters) {
-  const filtered = rows
+  const enriched = rows.map((row) => ({
+    ...row,
+    useCase: getUseCaseForVlt(row.vlt)
+  }));
+
+  const filtered = enriched
     .filter((row) => !filters.brand || row.brand === filters.brand)
     .filter((row) => !filters.search || `${row.brand} ${row.series} ${row.code}`.toLowerCase().includes(filters.search))
     .filter((row) => filters.minVlt === null || row.vlt >= filters.minVlt)
     .filter((row) => filters.maxVlt === null || row.vlt <= filters.maxVlt)
     .filter((row) => filters.minTser === null || row.tser >= filters.minTser)
     .filter((row) => filters.minIr === null || (row.ir !== null && row.ir >= filters.minIr))
+    .filter((row) => !filters.useCase || row.useCase.key === filters.useCase)
     .map((row) => scoreFilm(row, filters));
 
   const sorter = createSorter(filters.sort);
   return filtered.sort(sorter);
+}
+
+function renderVltPreview() {
+  const vlt = state.previewVlt ?? 35;
+  const localizedUseCase = getUseCaseCopy(getUseCaseForVlt(vlt).key);
+  const darkness = Math.min(0.86, Math.max(0.18, (100 - vlt) / 100));
+
+  elements.vltPreview.value = String(vlt);
+  elements.vltPreviewValue.textContent = `${vlt}%`;
+  elements.vltPreviewLabel.textContent = t("preview.current", {
+    label: localizedUseCase.label,
+    vlt
+  });
+  elements.vltPreviewHint.textContent = localizedUseCase.hint;
+  elements.previewMeter.style.width = `${vlt}%`;
+  elements.previewGlass.style.background = `linear-gradient(180deg, rgba(16, 22, 34, ${darkness}), rgba(4, 8, 16, ${Math.min(0.94, darkness + 0.18)}))`;
 }
 
 function scoreFilm(row, filters) {
@@ -446,17 +919,38 @@ function createSorter(mode) {
 
 function renderMatchBadge(score) {
   if (score >= 88) {
-    return `<span class="match-badge match-excellent">Excellent</span>`;
+    return `<span class="match-badge match-excellent">${t("match.excellent")}</span>`;
   }
   if (score >= 72) {
-    return `<span class="match-badge match-good">Good</span>`;
+    return `<span class="match-badge match-good">${t("match.good")}</span>`;
   }
-  return `<span class="match-badge match-fair">Fair</span>`;
+  return `<span class="match-badge match-fair">${t("match.fair")}</span>`;
+}
+
+function renderUseCaseBadge(useCase) {
+  return `<span class="use-case-badge use-case-${useCase.key}">${getUseCaseCopy(useCase.key).label}</span>`;
+}
+
+function getUseCaseForVlt(vlt) {
+  if (vlt >= USE_CASES[0].minVlt) {
+    return USE_CASES[0];
+  }
+  if (vlt >= USE_CASES[1].minVlt) {
+    return USE_CASES[1];
+  }
+  if (vlt >= USE_CASES[2].minVlt) {
+    return USE_CASES[2];
+  }
+  return USE_CASES[3];
+}
+
+function getUseCaseCopy(key) {
+  return getMessageValue(`useCases.${key}`);
 }
 
 function parseGoogleSheetResponse(response) {
   if (!response || response.status !== "ok" || !response.table || !Array.isArray(response.table.rows)) {
-    throw new Error("The Google Sheets response was not valid.");
+    throw new Error(t("errors.invalidSheetResponse"));
   }
 
   let lastBrand = "";
@@ -502,7 +996,7 @@ function loadGoogleSheetTable() {
     const callbackName = `filmSheetCallback_${Date.now()}`;
     const timeoutId = window.setTimeout(() => {
       cleanup();
-      reject(new Error("The request timed out."));
+      reject(new Error(t("errors.requestTimedOut")));
     }, 12000);
     const script = document.createElement("script");
 
@@ -519,7 +1013,7 @@ function loadGoogleSheetTable() {
 
     script.onerror = () => {
       cleanup();
-      reject(new Error("The sheet script could not be loaded."));
+      reject(new Error(t("errors.scriptLoadFailed")));
     };
 
     script.src = SHEET_QUERY_URL.replace("__FILM_SHEET_CALLBACK__", callbackName);
@@ -527,9 +1021,14 @@ function loadGoogleSheetTable() {
   });
 }
 
-function updateDataStatus(mode, message) {
-  elements.dataStatus.className = `data-status ${mode}`;
-  elements.dataStatus.textContent = message;
+function setDataStatus(mode, key, params = {}) {
+  state.sheetStatus = { mode, key, params };
+  applyDataStatus();
+}
+
+function applyDataStatus() {
+  elements.dataStatus.className = `data-status ${state.sheetStatus.mode}`;
+  elements.dataStatus.textContent = t(state.sheetStatus.key, state.sheetStatus.params);
 }
 
 function parseOptionalNumber(value) {
@@ -562,11 +1061,37 @@ function createBrandColors(rows) {
 }
 
 function formatTimestamp(date) {
-  return date.toLocaleString([], {
+  return date.toLocaleString(getLocaleTag(), {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function getInitialLocale() {
+  const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+  return MESSAGES[savedLocale] ? savedLocale : "th";
+}
+
+function getLocaleTag() {
+  return state.locale === "th" ? "th-TH" : "en-US";
+}
+
+function stringifyInputValue(value) {
+  return value === null ? "" : String(value);
+}
+
+function t(key, params = {}) {
+  const template = getMessageValue(key);
+  if (typeof template !== "string") {
+    return key;
+  }
+
+  return template.replace(/\{(\w+)\}/g, (_, token) => (params[token] ?? `{${token}}`));
+}
+
+function getMessageValue(path) {
+  return path.split(".").reduce((value, segment) => (value ? value[segment] : undefined), MESSAGES[state.locale]);
 }
