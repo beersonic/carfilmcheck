@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Car Film Spec Checker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Car film spec simulator</p>
+        <h1>Check TSER and VLT faster</h1>
+        <p class="intro">
+          Explore the film data from your Google Sheet, filter by performance, and find the closest matches to your target TSER and VLT.
+        </p>
+        <div class="data-source">
+          <div id="dataStatus" class="data-status">Connecting to Google Sheets...</div>
+          <button id="reloadData" class="ghost-button" type="button">Reload sheet</button>
+        </div>
+      </div>
+      <div class="hero-stats" id="heroStats"></div>
+    </section>
+
+    <section class="panel controls">
+      <div class="panel-heading">
+        <h2>Filters</h2>
+        <button id="resetFilters" class="ghost-button" type="button">Reset</button>
+      </div>
+      <div class="control-grid">
+        <label>
+          <span>Search</span>
+          <input id="searchInput" type="search" placeholder="Brand, series, or code">
+        </label>
+        <label>
+          <span>Brand</span>
+          <select id="brandFilter">
+            <option value="">All brands</option>
+          </select>
+        </label>
+        <label>
+          <span>Min VLT</span>
+          <input id="minVlt" type="number" min="0" max="100" step="0.1" placeholder="0">
+        </label>
+        <label>
+          <span>Max VLT</span>
+          <input id="maxVlt" type="number" min="0" max="100" step="0.1" placeholder="100">
+        </label>
+        <label>
+          <span>Min TSER</span>
+          <input id="minTser" type="number" min="0" max="100" step="0.1" placeholder="0">
+        </label>
+        <label>
+          <span>Min IR</span>
+          <input id="minIr" type="number" min="0" max="100" step="0.1" placeholder="0">
+        </label>
+      </div>
+    </section>
+
+    <section class="panel matcher">
+      <div class="panel-heading">
+        <h2>Target match simulator</h2>
+        <p>Set your desired spec and the table will rank the closest matches.</p>
+      </div>
+      <div class="control-grid">
+        <label>
+          <span>Target VLT</span>
+          <input id="targetVlt" type="number" min="0" max="100" step="0.1" placeholder="e.g. 20">
+        </label>
+        <label>
+          <span>Target TSER</span>
+          <input id="targetTser" type="number" min="0" max="100" step="0.1" placeholder="e.g. 70">
+        </label>
+        <label>
+          <span>Priority</span>
+          <select id="priorityMode">
+            <option value="balanced">Balanced</option>
+            <option value="tser">Prefer TSER</option>
+            <option value="vlt">Prefer VLT</option>
+          </select>
+        </label>
+        <label>
+          <span>Show</span>
+          <select id="sortMode">
+            <option value="match">Best match first</option>
+            <option value="tser-desc">Highest TSER first</option>
+            <option value="vlt-asc">Lowest VLT first</option>
+            <option value="vlt-desc">Highest VLT first</option>
+          </select>
+        </label>
+      </div>
+      <div id="matchSummary" class="match-summary"></div>
+    </section>
+
+    <section class="insights-grid">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>TSER vs VLT map</h2>
+          <p>Lower VLT usually means darker film. Higher TSER usually means stronger total heat rejection.</p>
+        </div>
+        <div id="chart" class="chart"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Quick compare</h2>
+          <p>Select up to 3 films from the table.</p>
+        </div>
+        <div id="comparePanel" class="compare-panel empty">No films selected yet.</div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Film specs</h2>
+        <p id="resultCount"></p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Compare</th>
+              <th>Brand</th>
+              <th>Series</th>
+              <th>Code</th>
+              <th>IR</th>
+              <th>UV</th>
+              <th>VLT</th>
+              <th>TSER</th>
+              <th>Match</th>
+            </tr>
+          </thead>
+          <tbody id="specTable"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
