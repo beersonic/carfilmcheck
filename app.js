@@ -1,6 +1,10 @@
 const GOOGLE_SHEET_ID = "1a0dw7qvvD_zHblQsJPyMwYfTY-Oc5mVYIoUw5MPB_jI";
 const SHEET_QUERY_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:__FILM_SHEET_CALLBACK__`;
+const FILM_API_BASE_URL = getFilmApiBaseUrl();
+const FILM_API_LIMIT = 500;
 const LOCALE_STORAGE_KEY = "carfilmcheck-locale";
+const SHEET_CACHE_STORAGE_KEY = "carfilmcheck-sheet-cache-v1";
+const SHEET_CACHE_TTL_MS = 60 * 60 * 1000;
 
 const USE_CASES = [
   { key: "night", minVlt: 35 },
@@ -18,14 +22,14 @@ const MESSAGES = {
       intro: "เริ่มจากกลุ่มที่เข้าใจง่าย เช่น ขับกลางคืนสบาย สมดุลใช้งานทุกวัน หรือฟิล์มลุคเข้ม แล้วค่อยลงไปดู TSER และ VLT เมื่ออยากเทียบสเปกละเอียด"
     },
     actions: {
-      reloadSheet: "โหลดชีตใหม่",
+      reloadSheet: "โหลดข้อมูลใหม่",
       showAllFilms: "แสดงทุกฟิล์ม",
       reset: "ล้างค่า"
     },
     useCases: {
       heading: "เลือกตามลักษณะการขับ",
       intro: "ถ้ายังงงกับ TSER และ VLT ให้เริ่มจากกลุ่มใช้งานเหล่านี้ก่อน",
-      empty: "กลุ่มการใช้งานจะแสดงหลังจากโหลดชีตสำเร็จ",
+      empty: "กลุ่มการใช้งานจะแสดงหลังจากโหลดข้อมูลสำเร็จ",
       noMatches: "ไม่มีฟิล์มในเงื่อนไขที่เลือก",
       count: "{count} รายการ",
       night: {
@@ -65,6 +69,12 @@ const MESSAGES = {
       searchPlaceholder: "ยี่ห้อ ซีรีส์ หรือรหัส",
       brand: "ยี่ห้อ",
       allBrands: "ทุกยี่ห้อ",
+      signalProfile: "สัญญาณ / วัสดุ",
+      allSignalProfiles: "ทุกโปรไฟล์",
+      signalFriendly: "เป็นมิตรกับสัญญาณ GPS / Easy Pass",
+      ceramic: "Ceramic",
+      ceramic100: "Ceramic 100%",
+      metalized: "Metalized",
       minVlt: "VLT ต่ำสุด",
       maxVlt: "VLT สูงสุด",
       minTser: "TSER ต่ำสุด",
@@ -94,51 +104,57 @@ const MESSAGES = {
       ariaLabel: "กราฟกระจายแสดงค่า VLT บนแกนนอนและ TSER บนแกนตั้ง",
       xAxis: "VLT (%)",
       yAxis: "TSER (%)",
-      unavailable: "กราฟจะใช้งานได้หลังจากโหลดชีตสำเร็จ",
-      loading: "กำลังโหลดกราฟ..."
+      unavailable: "กราฟจะใช้งานได้หลังจากโหลดข้อมูลสำเร็จ",
+      loading: "กำลังโหลดกราฟ...",
+      tapHint: "แตะหรือคลิกจุดบนกราฟเพื่อดูรายละเอียดและเลือกเทียบ",
+      addCompare: "เพิ่มเข้าเทียบ",
+      removeCompare: "เอาออกจากการเทียบ"
     },
     compare: {
       heading: "เทียบเร็ว",
       intro: "เลือกได้สูงสุด 3 ฟิล์มจากตาราง",
       empty: "ยังไม่ได้เลือกฟิล์ม",
-      emptyAfterLoad: "เลือกฟิล์มหลังจากโหลดชีตเสร็จ",
+      emptyAfterLoad: "เลือกฟิล์มหลังจากโหลดข้อมูลเสร็จ",
       noSeriesLabel: "ไม่มีชื่อซีรีส์"
     },
     table: {
       heading: "สเปกฟิล์ม",
       compare: "เทียบ",
       use: "การใช้งาน",
+      tech: "Tech",
       brand: "ยี่ห้อ",
       series: "ซีรีส์",
       code: "รหัส",
       match: "ความใกล้เคียง",
       noResults: "ไม่พบผลลัพธ์",
-      loading: "กำลังโหลดสเปกฟิล์มจาก Google Sheets...",
-      loadFailed: "ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้"
+      loading: "กำลังโหลดสเปกฟิล์มจาก backend API...",
+      loadFailed: "ไม่สามารถโหลดข้อมูลจาก backend API ได้"
     },
     heroStats: {
       filmsLoaded: "จำนวนฟิล์ม",
       averageSpec: "ค่าเฉลี่ยสเปก",
       topTser: "TSER สูงสุด",
       brightestFilm: "ฟิล์มสว่างสุด",
-      waiting: "กำลังรอข้อมูลสดจากชีต",
+      waiting: "กำลังรอข้อมูลสดจาก API",
       summaryAfterLoad: "สรุป TSER และ VLT จะแสดงหลังโหลดเสร็จ",
       noRows: "ยังไม่มีข้อมูลจากชีตในตอนนี้",
-      availableAfterLoad: "จะแสดงหลังโหลดชีตสำเร็จ",
-      fromLiveSheet: "จากข้อมูลสดใน Google Sheet",
+      availableAfterLoad: "จะแสดงหลังโหลดข้อมูลสำเร็จ",
+      fromLiveSheet: "จากข้อมูลสดใน API",
       quickBaseline: "ภาพรวมค่าเฉลี่ยของสินค้าทั้งหมด"
     },
     status: {
-      connecting: "กำลังเชื่อมต่อ Google Sheets...",
-      refreshing: "กำลังรีเฟรชข้อมูลจาก Google Sheets...",
-      ready: "เชื่อมต่อ Google Sheet สำเร็จ อัปเดตล่าสุด {timestamp}",
-      loadFailed: "โหลด Google Sheet ไม่สำเร็จ {reason}"
+      connecting: "กำลังเชื่อมต่อ backend API...",
+      refreshing: "กำลังรีเฟรชข้อมูลจาก backend API...",
+      cachedRefreshing: "กำลังแสดงข้อมูลที่แคชไว้จาก {timestamp} พร้อมรีเฟรชข้อมูลจาก API...",
+      ready: "เชื่อมต่อ backend API สำเร็จ อัปเดตล่าสุด {timestamp}",
+      loadFailed: "โหลดข้อมูลจาก backend API ไม่สำเร็จ {reason}",
+      refreshFailedUsingLastData: "รีเฟรชข้อมูลสดไม่สำเร็จ กำลังแสดงข้อมูลล่าสุดจาก {timestamp} {reason}"
     },
     summary: {
       loadingResults: "กำลังโหลดสเปกฟิล์ม...",
-      loadingMatch: "กำลังดึงข้อมูลสดจาก Google Sheet ที่เชื่อมไว้",
-      sheetLoadFailed: "โหลดชีตไม่สำเร็จ",
-      checkSheet: "ตรวจสอบว่าเปิดแชร์ชีตสาธารณะแล้ว จากนั้นกดโหลดชีตใหม่",
+      loadingMatch: "กำลังดึงข้อมูลสดจาก backend API",
+      sheetLoadFailed: "โหลดข้อมูลไม่สำเร็จ",
+      checkSheet: "ตรวจสอบว่า backend ยังทำงานอยู่ จากนั้นกดโหลดข้อมูลใหม่",
       resultsCount: "พบ {count} รายการ",
       noFilterMatch: "ไม่มีฟิล์มที่ตรงกับเงื่อนไขปัจจุบัน",
       noFilmData: "ยังไม่มีข้อมูลฟิล์ม",
@@ -153,8 +169,15 @@ const MESSAGES = {
       good: "ดี",
       fair: "พอใช้"
     },
+    tech: {
+      ceramic: "Ceramic",
+      ceramic100: "Ceramic 100%",
+      signalFriendly: "Signal / GPS Friendly",
+      metalized: "Metalized",
+      none: "ไม่มีข้อมูลสัญญาณ"
+    },
     errors: {
-      invalidSheetResponse: "ข้อมูลตอบกลับจาก Google Sheets ไม่ถูกต้อง",
+      invalidSheetResponse: "ข้อมูลตอบกลับจาก backend API ไม่ถูกต้อง",
       requestTimedOut: "การขอข้อมูลหมดเวลา",
       scriptLoadFailed: "โหลดสคริปต์ของชีตไม่สำเร็จ"
     }
@@ -167,14 +190,14 @@ const MESSAGES = {
       intro: "Start with simple groups like night-friendly, balanced, or dark privacy film. Then drill into TSER and VLT only when you need exact specs."
     },
     actions: {
-      reloadSheet: "Reload sheet",
+      reloadSheet: "Reload data",
       showAllFilms: "Show all films",
       reset: "Reset"
     },
     useCases: {
       heading: "Pick by driving use",
       intro: "Use these quick groups if TSER and VLT numbers still feel abstract.",
-      empty: "Use-case groups will appear after the sheet loads.",
+      empty: "Use-case groups will appear after the data loads.",
       noMatches: "No films in the current filters",
       count: "{count} films",
       night: {
@@ -204,7 +227,7 @@ const MESSAGES = {
     },
     preview: {
       heading: "VLT outside preview",
-      intro: "Drag the slider to estimate how dark the glass looks from outside before you compare the sheet rows.",
+      intro: "Drag the slider to estimate how dark the glass looks from outside before you compare the film rows.",
       label: "Preview VLT",
       current: "{label} at {vlt}% VLT"
     },
@@ -214,6 +237,12 @@ const MESSAGES = {
       searchPlaceholder: "Brand, series, or code",
       brand: "Brand",
       allBrands: "All brands",
+      signalProfile: "Signal / Material",
+      allSignalProfiles: "All signal profiles",
+      signalFriendly: "Signal / GPS friendly",
+      ceramic: "Ceramic",
+      ceramic100: "Ceramic 100%",
+      metalized: "Metalized",
       minVlt: "Min VLT",
       maxVlt: "Max VLT",
       minTser: "Min TSER",
@@ -243,51 +272,57 @@ const MESSAGES = {
       ariaLabel: "Scatter chart showing VLT on the horizontal axis and TSER on the vertical axis",
       xAxis: "VLT (%)",
       yAxis: "TSER (%)",
-      unavailable: "Chart unavailable until the sheet loads.",
-      loading: "Loading chart..."
+      unavailable: "Chart unavailable until the data loads.",
+      loading: "Loading chart...",
+      tapHint: "Tap or click a point to inspect the film and add it to compare.",
+      addCompare: "Add to compare",
+      removeCompare: "Remove from compare"
     },
     compare: {
       heading: "Quick compare",
       intro: "Select up to 3 films from the table.",
       empty: "No films selected yet.",
-      emptyAfterLoad: "Select films after the sheet finishes loading.",
+      emptyAfterLoad: "Select films after the data finishes loading.",
       noSeriesLabel: "No series label"
     },
     table: {
       heading: "Film specs",
       compare: "Compare",
       use: "Use",
+      tech: "Tech",
       brand: "Brand",
       series: "Series",
       code: "Code",
       match: "Match",
       noResults: "No results.",
-      loading: "Loading film specs from Google Sheets...",
-      loadFailed: "Unable to load live data from Google Sheets."
+      loading: "Loading film specs from backend API...",
+      loadFailed: "Unable to load live data from backend API."
     },
     heroStats: {
       filmsLoaded: "Films loaded",
       averageSpec: "Average spec",
       topTser: "Top TSER",
       brightestFilm: "Brightest film",
-      waiting: "Waiting for live sheet data",
+      waiting: "Waiting for live API data",
       summaryAfterLoad: "TSER and VLT summary will appear after load",
       noRows: "No live rows are available right now",
-      availableAfterLoad: "Available after a successful sheet load",
-      fromLiveSheet: "From the live Google Sheet",
+      availableAfterLoad: "Available after a successful data load",
+      fromLiveSheet: "From the live API",
       quickBaseline: "Quick baseline across all products"
     },
     status: {
-      connecting: "Connecting to Google Sheets...",
-      refreshing: "Refreshing from Google Sheets...",
-      ready: "Live Google Sheet connected. Last refresh {timestamp}.",
-      loadFailed: "Could not load the Google Sheet. {reason}"
+      connecting: "Connecting to backend API...",
+      refreshing: "Refreshing from backend API...",
+      cachedRefreshing: "Showing cached data from {timestamp} while refreshing backend API...",
+      ready: "Live backend API connected. Last refresh {timestamp}.",
+      loadFailed: "Could not load the backend API. {reason}",
+      refreshFailedUsingLastData: "Live refresh failed. Showing the last known data from {timestamp}. {reason}"
     },
     summary: {
       loadingResults: "Loading film specs...",
-      loadingMatch: "Fetching live data from the linked Google Sheet.",
-      sheetLoadFailed: "Sheet load failed.",
-      checkSheet: "Check that the sheet is public, then click Reload sheet.",
+      loadingMatch: "Fetching live data from the backend API.",
+      sheetLoadFailed: "Data load failed.",
+      checkSheet: "Check that the backend is running, then click Reload data.",
       resultsCount: "{count} matching films",
       noFilterMatch: "No films match the current filters.",
       noFilmData: "No film data is loaded yet.",
@@ -302,8 +337,15 @@ const MESSAGES = {
       good: "Good",
       fair: "Fair"
     },
+    tech: {
+      ceramic: "Ceramic",
+      ceramic100: "Ceramic 100%",
+      signalFriendly: "Signal / GPS Friendly",
+      metalized: "Metalized",
+      none: "No signal metadata"
+    },
     errors: {
-      invalidSheetResponse: "The Google Sheets response was not valid.",
+      invalidSheetResponse: "The backend API response was not valid.",
       requestTimedOut: "The request timed out.",
       scriptLoadFailed: "The sheet script could not be loaded."
     }
@@ -316,6 +358,7 @@ const state = {
   lastLoadedAt: null,
   previewVlt: 35,
   locale: getInitialLocale(),
+  chartFocusCode: "",
   sheetStatus: {
     mode: "loading",
     key: "status.connecting",
@@ -324,6 +367,7 @@ const state = {
   filters: {
     search: "",
     brand: "",
+    signalProfile: "",
     minVlt: null,
     maxVlt: null,
     minTser: null,
@@ -344,6 +388,7 @@ const elements = {
   clearUseCase: document.getElementById("clearUseCase"),
   useCaseGroups: document.getElementById("useCaseGroups"),
   brandFilter: document.getElementById("brandFilter"),
+  signalFilter: document.getElementById("signalFilter"),
   searchInput: document.getElementById("searchInput"),
   minVlt: document.getElementById("minVlt"),
   maxVlt: document.getElementById("maxVlt"),
@@ -355,6 +400,7 @@ const elements = {
   sortMode: document.getElementById("sortMode"),
   resultCount: document.getElementById("resultCount"),
   table: document.getElementById("specTable"),
+  specCards: document.getElementById("specCards"),
   chart: document.getElementById("chart"),
   comparePanel: document.getElementById("comparePanel"),
   matchSummary: document.getElementById("matchSummary"),
@@ -377,7 +423,8 @@ function initialize() {
   renderStaticText();
   renderLoadingShell();
   renderVltPreview();
-  loadSheetData();
+  const hasCachedData = hydrateCachedFilms();
+  loadFilmData({ hasCachedData });
 }
 
 function bindEvents() {
@@ -404,6 +451,11 @@ function bindEvents() {
     render();
   });
 
+  elements.signalFilter.addEventListener("change", (event) => {
+    state.filters.signalProfile = event.target.value;
+    render();
+  });
+
   elements.priorityMode.addEventListener("change", (event) => {
     state.filters.priority = event.target.value;
     render();
@@ -425,6 +477,7 @@ function bindEvents() {
     state.filters = {
       search: "",
       brand: "",
+      signalProfile: "",
       minVlt: null,
       maxVlt: null,
       minTser: null,
@@ -441,7 +494,7 @@ function bindEvents() {
   });
 
   elements.reloadData.addEventListener("click", () => {
-    loadSheetData();
+    loadFilmData();
   });
 
   elements.clearUseCase.addEventListener("click", () => {
@@ -462,6 +515,37 @@ function bindEvents() {
   elements.vltPreview.addEventListener("input", (event) => {
     state.previewVlt = parseOptionalNumber(event.target.value) ?? 35;
     renderVltPreview();
+  });
+
+  elements.table.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("input[data-code]");
+    if (checkbox) {
+      toggleCompare(checkbox.dataset.code);
+    }
+  });
+
+  elements.specCards.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("input[data-code]");
+    if (checkbox) {
+      toggleCompare(checkbox.dataset.code);
+    }
+  });
+
+  elements.chart.addEventListener("click", (event) => {
+    const compareTrigger = event.target.closest("[data-chart-compare]");
+    if (compareTrigger) {
+      toggleCompare(compareTrigger.dataset.chartCompare);
+      return;
+    }
+
+    const pointTrigger = event.target.closest("[data-chart-code]");
+    if (!pointTrigger) {
+      return;
+    }
+
+    const { chartCode } = pointTrigger.dataset;
+    state.chartFocusCode = state.chartFocusCode === chartCode ? "" : chartCode;
+    render();
   });
 }
 
@@ -503,6 +587,7 @@ function renderStaticText() {
 function syncInputs() {
   elements.searchInput.value = state.filters.search ? state.filters.search : "";
   elements.brandFilter.value = state.filters.brand;
+  elements.signalFilter.value = state.filters.signalProfile;
   elements.minVlt.value = stringifyInputValue(state.filters.minVlt);
   elements.maxVlt.value = stringifyInputValue(state.filters.maxVlt);
   elements.minTser.value = stringifyInputValue(state.filters.minTser);
@@ -536,48 +621,115 @@ function renderLoadingShell() {
   `;
   elements.resultCount.textContent = t("summary.loadingResults");
   elements.matchSummary.textContent = t("summary.loadingMatch");
-  elements.table.innerHTML = `<tr><td colspan="10">${t("table.loading")}</td></tr>`;
-  elements.chart.innerHTML = `<p>${t("chart.loading")}</p>`;
+  elements.table.innerHTML = `
+    <tr class="table-skeleton-row">
+      <td colspan="11"><div class="table-skeleton-line"></div></td>
+    </tr>
+    <tr class="table-skeleton-row">
+      <td colspan="11"><div class="table-skeleton-line"></div></td>
+    </tr>
+    <tr class="table-skeleton-row">
+      <td colspan="11"><div class="table-skeleton-line"></div></td>
+    </tr>
+  `;
+  elements.specCards.innerHTML = `
+    <article class="spec-card skeleton-card"></article>
+    <article class="spec-card skeleton-card"></article>
+    <article class="spec-card skeleton-card"></article>
+  `;
+  elements.chart.innerHTML = `
+    <div class="chart-skeleton"></div>
+    <p class="chart-hint">${t("chart.loading")}</p>
+  `;
   elements.comparePanel.className = "compare-panel empty";
   elements.comparePanel.textContent = t("compare.emptyAfterLoad");
 }
 
-async function loadSheetData() {
-  setDataStatus("loading", "status.refreshing");
+async function loadFilmData({ hasCachedData = false } = {}) {
+  if (hasCachedData && state.lastLoadedAt) {
+    setDataStatus("loading", "status.cachedRefreshing", { timestamp: formatTimestamp(state.lastLoadedAt) });
+  } else {
+    setDataStatus("loading", "status.refreshing");
+  }
   elements.reloadData.disabled = true;
 
   try {
-    const response = await loadGoogleSheetTable();
-    const films = parseGoogleSheetResponse(response);
-    state.films = films;
-    state.brandColors = createBrandColors(films);
-    state.lastLoadedAt = new Date();
-    trimCompareSelection();
-
-    if (state.filters.brand && !films.some((film) => film.brand === state.filters.brand)) {
-      state.filters.brand = "";
-      elements.brandFilter.value = "";
-    }
-
-    renderBrandOptions();
-    renderHeroStats(films);
-    setDataStatus("ready", "status.ready", { timestamp: formatTimestamp(state.lastLoadedAt) });
-    render();
+    const films = await loadFilmsFromApi();
+    const loadedAt = new Date();
+    cacheFilms(films, loadedAt);
+    applyFilms(films, loadedAt);
+    setDataStatus("ready", "status.ready", { timestamp: formatTimestamp(loadedAt) });
   } catch (error) {
-    state.films = [];
-    state.brandColors = {};
-    renderBrandOptions();
-    renderHeroStats([]);
-    setDataStatus("error", "status.loadFailed", { reason: error.message });
-    elements.resultCount.textContent = t("summary.sheetLoadFailed");
-    elements.matchSummary.textContent = t("summary.checkSheet");
-    elements.table.innerHTML = `<tr><td colspan="10">${t("table.loadFailed")}</td></tr>`;
-    elements.chart.innerHTML = `<p>${t("chart.unavailable")}</p>`;
-    elements.comparePanel.className = "compare-panel empty";
-    elements.comparePanel.textContent = t("compare.emptyAfterLoad");
+    if (state.films.length && state.lastLoadedAt) {
+      setDataStatus("error", "status.refreshFailedUsingLastData", {
+        timestamp: formatTimestamp(state.lastLoadedAt),
+        reason: error.message
+      });
+      render();
+    } else {
+      state.films = [];
+      state.brandColors = {};
+      renderBrandOptions();
+      renderHeroStats([]);
+      setDataStatus("error", "status.loadFailed", { reason: error.message });
+      elements.resultCount.textContent = t("summary.sheetLoadFailed");
+      elements.matchSummary.textContent = t("summary.checkSheet");
+      elements.table.innerHTML = `<tr><td colspan="11">${t("table.loadFailed")}</td></tr>`;
+      elements.specCards.innerHTML = `<p class="empty-copy">${t("table.loadFailed")}</p>`;
+      elements.chart.innerHTML = `<p class="chart-hint">${t("chart.unavailable")}</p>`;
+      elements.comparePanel.className = "compare-panel empty";
+      elements.comparePanel.textContent = t("compare.emptyAfterLoad");
+    }
   } finally {
     elements.reloadData.disabled = false;
   }
+}
+
+async function loadFilmsFromApi() {
+  const url = new URL('/api/films', FILM_API_BASE_URL);
+  url.searchParams.set('limit', String(FILM_API_LIMIT));
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`.trim());
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error(t("errors.invalidSheetResponse"));
+  }
+
+  return payload.map(normalizeApiFilm);
+}
+
+function hydrateCachedFilms() {
+  const cached = readCachedFilms();
+  if (!cached) {
+    return false;
+  }
+
+  applyFilms(cached.films, new Date(cached.savedAt));
+  return true;
+}
+
+function applyFilms(films, loadedAt) {
+  state.films = films;
+  state.brandColors = createBrandColors(films);
+  state.lastLoadedAt = loadedAt;
+  trimCompareSelection();
+
+  if (state.filters.brand && !films.some((film) => film.brand === state.filters.brand)) {
+    state.filters.brand = "";
+  }
+
+  renderBrandOptions();
+  renderHeroStats(films);
+  render();
 }
 
 function render() {
@@ -586,6 +738,7 @@ function render() {
   renderUseCaseGroups(groupedRows);
   renderSummary(prepared);
   renderTable(prepared);
+  renderSpecCards(prepared);
   renderChart(prepared);
   renderComparePanel();
 }
@@ -684,49 +837,70 @@ function renderSummary(rows) {
   const bestMatch = rows[0];
   elements.resultCount.textContent = t("summary.resultsCount", { count: rows.length });
 
+  const collapsePanel = document.getElementById("resultCollapsePanel");
+  const collapseContent = document.getElementById("collapseResultContent");
   if (!bestMatch) {
     elements.matchSummary.textContent = state.films.length
       ? t("summary.noFilterMatch")
       : t("summary.noFilmData");
+    if (collapsePanel && collapseContent) {
+      collapseContent.innerHTML = `<div class="collapse-result-lead">${elements.matchSummary.textContent}</div>`;
+    }
     return;
   }
 
   const hasTargets = state.filters.targetVlt !== null || state.filters.targetTser !== null;
   const useCaseLabel = getUseCaseCopy(bestMatch.useCase.key).label;
+  let summaryText = "";
   if (!hasTargets) {
-    elements.matchSummary.textContent = t("summary.currentLeader", {
+    summaryText = t("summary.currentLeader", {
       brand: bestMatch.brand,
       code: bestMatch.code,
       useCase: useCaseLabel,
       tser: bestMatch.tser,
       vlt: bestMatch.vlt
     });
-    return;
+    elements.matchSummary.textContent = summaryText;
+  } else {
+    const tserDelta = bestMatch.deltaTser === null
+      ? t("summary.notAvailable")
+      : t("summary.tserDelta", { delta: bestMatch.deltaTser.toFixed(1) });
+    const vltDelta = bestMatch.deltaVlt === null
+      ? t("summary.notAvailable")
+      : t("summary.vltDelta", { delta: bestMatch.deltaVlt.toFixed(1) });
+    summaryText = t("summary.bestMatch", {
+      brand: bestMatch.brand,
+      code: bestMatch.code,
+      useCase: useCaseLabel,
+      tser: bestMatch.tser,
+      vlt: bestMatch.vlt,
+      tserDelta,
+      vltDelta
+    });
+    elements.matchSummary.textContent = summaryText;
   }
+  if (collapsePanel && collapseContent) {
+    const resultItems = rows.slice(0, 3).map((row, index) => {
+      return `
+        <li>
+          <strong>${index + 1}. ${row.brand} ${row.code}</strong> (${row.series || "-"})
+          <div class="collapse-result-meta">${row.tser}% TSER, ${row.vlt}% VLT · ${getUseCaseCopy(row.useCase.key).label}</div>
+        </li>
+      `;
+    }).join("");
 
-  const tserDelta = bestMatch.deltaTser === null
-    ? t("summary.notAvailable")
-    : t("summary.tserDelta", { delta: bestMatch.deltaTser.toFixed(1) });
-  const vltDelta = bestMatch.deltaVlt === null
-    ? t("summary.notAvailable")
-    : t("summary.vltDelta", { delta: bestMatch.deltaVlt.toFixed(1) });
-
-  elements.matchSummary.textContent = t("summary.bestMatch", {
-    brand: bestMatch.brand,
-    code: bestMatch.code,
-    useCase: useCaseLabel,
-    tser: bestMatch.tser,
-    vlt: bestMatch.vlt,
-    tserDelta,
-    vltDelta
-  });
+    collapseContent.innerHTML = `
+      <div class="collapse-result-lead">${summaryText}</div>
+      <ol class="collapse-result-list">${resultItems}</ol>
+    `;
+  }
 }
 
 function renderTable(rows) {
   elements.table.innerHTML = "";
 
   if (!rows.length) {
-    elements.table.innerHTML = `<tr><td colspan="10">${t("table.noResults")}</td></tr>`;
+    elements.table.innerHTML = `<tr><td colspan="11">${t("table.noResults")}</td></tr>`;
     return;
   }
 
@@ -737,6 +911,7 @@ function renderTable(rows) {
     tr.innerHTML = `
       <td><input type="checkbox" data-code="${row.code}" ${checked}></td>
       <td>${renderUseCaseBadge(row.useCase)}</td>
+      <td>${renderTechBadges(row, { compact: true })}</td>
       <td>${row.brand}</td>
       <td>${row.series || "-"}</td>
       <td>${row.code}</td>
@@ -747,15 +922,54 @@ function renderTable(rows) {
       <td>${renderMatchBadge(row.score)}</td>
     `;
 
-    tr.querySelector("input").addEventListener("change", (event) => toggleCompare(event.target.dataset.code));
     elements.table.appendChild(tr);
   });
 }
 
+function renderSpecCards(rows) {
+  if (!rows.length) {
+    elements.specCards.innerHTML = `<p class="empty-copy">${t("table.noResults")}</p>`;
+    return;
+  }
+
+  elements.specCards.innerHTML = rows.map((row) => {
+    const checked = state.compareCodes.has(row.code) ? "checked" : "";
+    return `
+      <article class="spec-card">
+        <div class="spec-card-header">
+          <div>
+            <div class="spec-card-title">${row.brand} ${row.code}</div>
+            <div class="spec-card-subtitle">${row.series || "-"}</div>
+          </div>
+          <label class="spec-card-toggle">
+            <span>${t("table.compare")}</span>
+            <input type="checkbox" data-code="${row.code}" ${checked}>
+          </label>
+        </div>
+        <div class="spec-card-tags">
+          ${renderUseCaseBadge(row.useCase)}
+          ${renderTechBadges(row)}
+        </div>
+        <div class="spec-grid spec-grid-mobile">
+          <div class="spec-pill">IR: ${formatNumber(row.ir)}%</div>
+          <div class="spec-pill">UV: ${formatNumber(row.uv)}%</div>
+          <div class="spec-pill">VLT: ${formatNumber(row.vlt)}%</div>
+          <div class="spec-pill">TSER: ${formatNumber(row.tser)}%</div>
+        </div>
+        <div class="spec-card-match">${renderMatchBadge(row.score)}</div>
+      </article>
+    `;
+  }).join("");
+}
+
 function renderChart(rows) {
   if (!rows.length) {
-    elements.chart.innerHTML = `<p>${t("chart.empty")}</p>`;
+    elements.chart.innerHTML = `<p class="chart-hint">${t("chart.empty")}</p>`;
     return;
+  }
+
+  if (state.chartFocusCode && !rows.some((row) => row.code === state.chartFocusCode)) {
+    state.chartFocusCode = "";
   }
 
   const width = 700;
@@ -778,25 +992,53 @@ function renderChart(rows) {
 
   const dots = rows.map((row) => {
     const isSelected = state.compareCodes.has(row.code);
+    const isFocused = state.chartFocusCode === row.code;
     const radius = isSelected ? 8 : 5;
-    const stroke = isSelected ? "#ffffff" : "rgba(255,255,255,0.4)";
+    const stroke = isFocused ? "#ff9900" : isSelected ? "#8e6238" : "rgba(142,98,56,0.45)";
     return `
-      <g>
+      <g class="chart-point-group">
+        <circle class="chart-hit-area" cx="${x(row.vlt)}" cy="${y(row.tser)}" r="14" fill="transparent" data-chart-code="${row.code}" tabindex="0"></circle>
         <circle cx="${x(row.vlt)}" cy="${y(row.tser)}" r="${radius}" fill="${state.brandColors[row.brand]}" stroke="${stroke}" stroke-width="1.5"></circle>
         ${isSelected ? `<text class="dot-label" x="${x(row.vlt) + 10}" y="${y(row.tser) - 10}">${row.code}</text>` : ""}
       </g>
     `;
   }).join("");
 
+  const focusedRow = rows.find((row) => row.code === state.chartFocusCode);
+  const compareActionLabel = focusedRow && state.compareCodes.has(focusedRow.code)
+    ? t("chart.removeCompare")
+    : t("chart.addCompare");
+
   elements.chart.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${t("chart.ariaLabel")}">
-      ${gridLines}
-      <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="rgba(255,255,255,0.3)"></line>
-      <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="rgba(255,255,255,0.3)"></line>
-      <text class="axis-label" x="${width / 2}" y="${height - 2}" text-anchor="middle">${t("chart.xAxis")}</text>
-      <text class="axis-label" x="18" y="${height / 2}" text-anchor="middle" transform="rotate(-90 18 ${height / 2})">${t("chart.yAxis")}</text>
-      ${dots}
-    </svg>
+    <div class="chart-shell">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${t("chart.ariaLabel")}">
+        ${gridLines}
+        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="rgba(176,120,63,0.22)"></line>
+        <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="rgba(176,120,63,0.22)"></line>
+        <text class="axis-label" x="${width / 2}" y="${height - 2}" text-anchor="middle">${t("chart.xAxis")}</text>
+        <text class="axis-label" x="18" y="${height / 2}" text-anchor="middle" transform="rotate(-90 18 ${height / 2})">${t("chart.yAxis")}</text>
+        ${dots}
+      </svg>
+    </div>
+    ${focusedRow ? `
+      <article class="chart-meta-panel">
+        <div>
+          <strong>${focusedRow.brand} ${focusedRow.code}</strong>
+          <div class="compare-meta">${focusedRow.series || "-"}</div>
+        </div>
+        <div class="spec-card-tags">
+          ${renderUseCaseBadge(focusedRow.useCase)}
+          ${renderTechBadges(focusedRow)}
+        </div>
+        <div class="spec-grid">
+          <div class="spec-pill">IR: ${formatNumber(focusedRow.ir)}%</div>
+          <div class="spec-pill">UV: ${formatNumber(focusedRow.uv)}%</div>
+          <div class="spec-pill">VLT: ${formatNumber(focusedRow.vlt)}%</div>
+          <div class="spec-pill">TSER: ${formatNumber(focusedRow.tser)}%</div>
+        </div>
+        <button class="ghost-button chart-compare-button" type="button" data-chart-compare="${focusedRow.code}">${compareActionLabel}</button>
+      </article>
+    ` : `<p class="chart-hint">${t("chart.tapHint")}</p>`}
   `;
 }
 
@@ -814,7 +1056,10 @@ function renderComparePanel() {
     <article class="compare-card">
       <h3>${film.brand} ${film.code}</h3>
       <div class="compare-meta">${film.series || t("compare.noSeriesLabel")}</div>
-      <div class="compare-tag-row">${renderUseCaseBadge(getUseCaseForVlt(film.vlt))}</div>
+      <div class="compare-tag-row">
+        ${renderUseCaseBadge(getUseCaseForVlt(film.vlt))}
+        ${renderTechBadges(film)}
+      </div>
       <div class="spec-grid">
         <div class="spec-pill">IR: ${formatNumber(film.ir)}%</div>
         <div class="spec-pill">UV: ${formatNumber(film.uv)}%</div>
@@ -856,7 +1101,8 @@ function applyFiltersAndScores(rows, filters) {
 
   const filtered = enriched
     .filter((row) => !filters.brand || row.brand === filters.brand)
-    .filter((row) => !filters.search || `${row.brand} ${row.series} ${row.code}`.toLowerCase().includes(filters.search))
+    .filter((row) => !filters.signalProfile || matchesSignalProfile(row, filters.signalProfile))
+    .filter((row) => !filters.search || `${row.brand} ${row.series} ${row.code} ${row.material || ""} ${row.signal || ""} ${row.notes || ""}`.toLowerCase().includes(filters.search))
     .filter((row) => filters.minVlt === null || row.vlt >= filters.minVlt)
     .filter((row) => filters.maxVlt === null || row.vlt <= filters.maxVlt)
     .filter((row) => filters.minTser === null || row.tser >= filters.minTser)
@@ -948,25 +1194,61 @@ function getUseCaseCopy(key) {
   return getMessageValue(`useCases.${key}`);
 }
 
+function getTechCopy(key) {
+  return getMessageValue(`tech.${key}`);
+}
+
+function getFilmApiBaseUrl() {
+  if (window.__CARFILMCHECK_API_BASE_URL__) {
+    return String(window.__CARFILMCHECK_API_BASE_URL__).replace(/\/$/, "");
+  }
+
+  if (window.location.protocol === "file:") {
+    return "http://localhost:3001";
+  }
+
+  return window.location.origin;
+}
+
+function normalizeApiFilm(row) {
+  return {
+    brand: String(row.brand || "").trim(),
+    series: String(row.series || "").trim(),
+    code: String(row.code || "").trim(),
+    ir: parseOptionalNumber(row.ir),
+    uv: parseOptionalNumber(row.uv),
+    vlt: Number(row.vlt),
+    tser: Number(row.tser),
+    material: String(row.material || "").trim(),
+    signal: String(row.signal || "").trim(),
+    notes: String(row.notes || "").trim()
+  };
+}
+
 function parseGoogleSheetResponse(response) {
   if (!response || response.status !== "ok" || !response.table || !Array.isArray(response.table.rows)) {
     throw new Error(t("errors.invalidSheetResponse"));
   }
+
+  const columns = resolveSheetColumns(response.table);
 
   let lastBrand = "";
   let lastSeries = "";
 
   return response.table.rows
     .map((row) => row.c || [])
-    .filter((cells) => getCellValue(cells[2]))
+    .filter((cells) => getCellValue(cells[columns.code]))
     .map((cells) => {
-      const rawBrand = getCellValue(cells[0]) || "";
-      const rawSeries = getCellValue(cells[1]) || "";
-      const code = getCellValue(cells[2]) || "";
-      const ir = getCellValue(cells[3]);
-      const uv = getCellValue(cells[4]);
-      const vlt = getCellValue(cells[5]);
-      const tser = getCellValue(cells[6]);
+      const rawBrand = getCellValue(cells[columns.brand]) || "";
+      const rawSeries = getCellValue(cells[columns.series]) || "";
+      const code = getCellValue(cells[columns.code]) || "";
+      const ir = getCellValue(cells[columns.ir]);
+      const uv = getCellValue(cells[columns.uv]);
+      const vlt = getCellValue(cells[columns.vlt]);
+      const tser = getCellValue(cells[columns.tser]);
+      const material = getCellValue(cells[columns.material]) || "";
+      const signal = getCellValue(cells[columns.signal]) || "";
+      const notes = getCellValue(cells[columns.notes]) || "";
 
       if (rawBrand) {
         lastBrand = rawBrand;
@@ -982,9 +1264,59 @@ function parseGoogleSheetResponse(response) {
         ir: parseOptionalNumber(ir),
         uv: parseOptionalNumber(uv),
         vlt: Number(vlt),
-        tser: Number(tser)
+        tser: Number(tser),
+        material: String(material).trim(),
+        signal: String(signal).trim(),
+        notes: String(notes).trim()
       };
     });
+}
+
+function resolveSheetColumns(table) {
+  const fallback = {
+    brand: 0,
+    series: 1,
+    code: 2,
+    ir: 3,
+    uv: 4,
+    vlt: 5,
+    tser: 6,
+    material: 7,
+    signal: 8,
+    notes: 9
+  };
+
+  const aliases = {
+    brand: ["brand", "ยี่ห้อ"],
+    series: ["series", "ซีรีส์"],
+    code: ["code", "model", "film code", "รหัส"],
+    ir: ["ir"],
+    uv: ["uv"],
+    vlt: ["vlt"],
+    tser: ["tser"],
+    material: ["material", "tech", "ceramic", "film type", "วัสดุ", "ประเภท"],
+    signal: ["signal", "gps", "easy pass", "easypass", "rfid"],
+    notes: ["note", "remark", "tag", "feature", "หมายเหตุ"]
+  };
+
+  const labels = Array.isArray(table.cols)
+    ? table.cols.map((column) => normalizeHeaderValue(column.label || column.id || ""))
+    : [];
+
+  return Object.keys(fallback).reduce((columns, key) => {
+    const matchIndex = labels.findIndex((label) => aliases[key].some((alias) => label.includes(alias)));
+    columns[key] = matchIndex >= 0 ? matchIndex : fallback[key];
+    return columns;
+  }, {});
+}
+
+function normalizeHeaderValue(value) {
+  return String(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9ก-๙]+/g, " ")
+    .trim();
 }
 
 function getCellValue(cell) {
@@ -1058,6 +1390,97 @@ function createBrandColors(rows) {
     map[brand] = palette[index % palette.length];
     return map;
   }, {});
+}
+
+function getFilmTechTagKeys(row) {
+  const material = normalizeTechValue(row.material);
+  const signal = normalizeTechValue(row.signal);
+  const notes = normalizeTechValue(row.notes);
+  const combined = `${material} ${signal} ${notes}`;
+  const tags = [];
+  const hasCeramic = /ceramic/.test(combined);
+  const hasCeramic100 = hasCeramic && /(100|100%|full ceramic|ceramic 100)/.test(combined);
+  const signalFriendly = /(signal friendly|gps friendly|easy pass friendly|easypass friendly|rfid friendly|rf friendly|gps ok|easy pass ok|rfid ok|compatible|pass through|pass-through|non metal|non-metal|metal free|metal-free)/.test(combined);
+  const metalized = !/(non metal|non-metal|metal free|metal-free)/.test(combined)
+    && /(metalized|metallized|metal layer|sputter|hybrid metal)/.test(combined);
+
+  if (hasCeramic100) {
+    tags.push("ceramic100");
+  } else if (hasCeramic) {
+    tags.push("ceramic");
+  }
+
+  if (signalFriendly) {
+    tags.push("signalFriendly");
+  }
+
+  if (metalized) {
+    tags.push("metalized");
+  }
+
+  return [...new Set(tags)];
+}
+
+function normalizeTechValue(value) {
+  return String(value || "").toLowerCase().replace(/[_-]+/g, " ").trim();
+}
+
+function renderTechBadges(row, { compact = false } = {}) {
+  const tags = getFilmTechTagKeys(row);
+  if (!tags.length) {
+    return compact ? `<span class="cell-muted">${t("tech.none")}</span>` : `<span class="tech-empty">${t("tech.none")}</span>`;
+  }
+
+  return tags.map((tag) => `<span class="tech-badge tech-${tag}">${getTechCopy(tag)}</span>`).join("");
+}
+
+function matchesSignalProfile(row, profile) {
+  const tags = getFilmTechTagKeys(row);
+
+  switch (profile) {
+    case "signal-friendly":
+      return tags.includes("signalFriendly");
+    case "ceramic":
+      return tags.includes("ceramic") || tags.includes("ceramic100");
+    case "ceramic100":
+      return tags.includes("ceramic100");
+    case "metalized":
+      return tags.includes("metalized");
+    default:
+      return true;
+  }
+}
+
+function cacheFilms(films, savedAt) {
+  window.localStorage.setItem(SHEET_CACHE_STORAGE_KEY, JSON.stringify({
+    savedAt: savedAt.toISOString(),
+    films
+  }));
+}
+
+function readCachedFilms() {
+  const raw = window.localStorage.getItem(SHEET_CACHE_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed.savedAt || !Array.isArray(parsed.films)) {
+      return null;
+    }
+
+    const savedAtMs = new Date(parsed.savedAt).getTime();
+    if (!Number.isFinite(savedAtMs) || Date.now() - savedAtMs > SHEET_CACHE_TTL_MS) {
+      window.localStorage.removeItem(SHEET_CACHE_STORAGE_KEY);
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    window.localStorage.removeItem(SHEET_CACHE_STORAGE_KEY);
+    return null;
+  }
 }
 
 function formatTimestamp(date) {

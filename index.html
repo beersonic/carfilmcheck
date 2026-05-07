@@ -20,8 +20,8 @@
           Start with simple groups like night-friendly, balanced, or dark privacy film. Then drill into TSER and VLT only when you need exact specs.
         </p>
         <div class="data-source">
-          <div id="dataStatus" class="data-status">Connecting to Google Sheets...</div>
-          <button id="reloadData" class="ghost-button" type="button" data-i18n="actions.reloadSheet">Reload sheet</button>
+          <div id="dataStatus" class="data-status">Connecting to backend API...</div>
+          <button id="reloadData" class="ghost-button" type="button" data-i18n="actions.reloadSheet">Reload data</button>
         </div>
       </div>
       <div class="hero-stats" id="heroStats"></div>
@@ -99,6 +99,16 @@
           <span data-i18n="filters.brand">Brand</span>
           <select id="brandFilter">
             <option value="" data-i18n="filters.allBrands">All brands</option>
+          </select>
+        </label>
+        <label>
+          <span data-i18n="filters.signalProfile">Signal / Material</span>
+          <select id="signalFilter">
+            <option value="" data-i18n="filters.allSignalProfiles">All signal profiles</option>
+            <option value="signal-friendly" data-i18n="filters.signalFriendly">Signal / GPS friendly</option>
+            <option value="ceramic" data-i18n="filters.ceramic">Ceramic</option>
+            <option value="ceramic100" data-i18n="filters.ceramic100">Ceramic 100%</option>
+            <option value="metalized" data-i18n="filters.metalized">Metalized</option>
           </select>
         </label>
         <label>
@@ -183,6 +193,7 @@
             <tr>
               <th data-i18n="table.compare">Compare</th>
               <th data-i18n="table.use">Use</th>
+              <th data-i18n="table.tech">Tech</th>
               <th data-i18n="table.brand">Brand</th>
               <th data-i18n="table.series">Series</th>
               <th data-i18n="table.code">Code</th>
@@ -196,8 +207,16 @@
           <tbody id="specTable"></tbody>
         </table>
       </div>
+      <div id="specCards" class="spec-cards"></div>
     </section>
   </main>
+
+  <section class="panel result-collapse" id="resultCollapsePanel">
+    <details id="resultCollapseDetails" open>
+      <summary>ผลลัพธ์</summary>
+      <div id="collapseResultContent" class="collapse-result-content"></div>
+    </details>
+  </section>
 
   <script src="app.js"></script>
 </body>
